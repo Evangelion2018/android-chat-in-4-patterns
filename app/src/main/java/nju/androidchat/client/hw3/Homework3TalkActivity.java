@@ -1,4 +1,4 @@
-package nju.androidchat.client.frp0;
+package nju.androidchat.client.hw3;
 
 import android.annotation.SuppressLint;
 import android.os.Bundle;
@@ -14,11 +14,15 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.jakewharton.rxbinding3.view.RxView;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Future;
 
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
+import io.reactivex.Scheduler;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.schedulers.Schedulers;
 import kotlin.Unit;
@@ -33,10 +37,11 @@ import nju.androidchat.shared.message.ClientSendMessage;
 import nju.androidchat.shared.message.ErrorMessage;
 import nju.androidchat.shared.message.Message;
 import nju.androidchat.shared.message.RecallMessage;
+import nju.androidchat.shared.message.RecallRequestMessage;
 import nju.androidchat.shared.message.ServerSendMessage;
 
 @lombok.extern.java.Log
-public class Frp0TalkActivity extends AppCompatActivity implements OnRecallMessageRequested {
+public class Homework3TalkActivity extends AppCompatActivity implements OnRecallMessageRequested {
 
     private SocketClient socketClient;
     private Observable<ClientSendMessage> sendMessages$ = Observable.empty();
@@ -49,6 +54,10 @@ public class Frp0TalkActivity extends AppCompatActivity implements OnRecallMessa
     Button sendButton;
     EditText editText;
     LinearLayout messageList;
+
+    HashMap<UUID,ItemTextSend> sendMap = new HashMap<>();
+    HashMap<UUID,ItemTextReceive> receiveMap = new HashMap<>();
+
 
     @SuppressLint("CheckResult")
     @Override
@@ -87,7 +96,7 @@ public class Frp0TalkActivity extends AppCompatActivity implements OnRecallMessa
 
 
         // 4. 处理每个流
-        // 4.1 处理错误流
+        // 4.2 处理错误流
         this.errorMessage$
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe((message) -> {
@@ -95,7 +104,7 @@ public class Frp0TalkActivity extends AppCompatActivity implements OnRecallMessa
                 }, Throwable::printStackTrace);
 
 
-        // 4.2 处理发送流，将每个消息写到服务器
+        // 4.3 处理发送流，将每个消息写到服务器
         this.sendMessages$
                 .observeOn(Schedulers.io()) // 发送消息网络要在 io线程做
                 .subscribe((message) -> {
@@ -104,10 +113,27 @@ public class Frp0TalkActivity extends AppCompatActivity implements OnRecallMessa
                 }, Throwable::printStackTrace);
 
 
-        // 4.3 合并发送流和服务器接受消息流，并更新UI
+        //4.4 处理撤回流
+        this.recallMessage$
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe((message) -> {
+                    onRecallMessageRequested(message.getMessageId());
+                    Log.d("recall", message.toString());
+                } ,Throwable::printStackTrace);
+
+
+        // 4.5 合并发送流和服务器接受消息流，并更新UI
         this.addToViewMessages$ = Observable.merge(
-                this.serverSendMessages$.share().map(message -> new ItemTextReceive(this, message.getMessage(), message.getMessageId())),
-                this.sendMessages$.map(message -> new ItemTextSend(this, message.getMessage(), message.getMessageId(), this))
+                this.serverSendMessages$.share().map(message -> {
+                    ItemTextReceive receive = new ItemTextReceive(this, message.getMessage(), message.getMessageId());
+                    receiveMap.put(message.getMessageId(),receive);
+                    return receive;
+                }),
+                this.sendMessages$.map(message -> {
+                    ItemTextSend send = new ItemTextSend(this, message.getMessage(), message.getMessageId(), this);
+                    sendMap.put(message.getMessageId(),send);
+                    return send;
+                })
         );
 
         this.addToViewMessages$
@@ -117,7 +143,6 @@ public class Frp0TalkActivity extends AppCompatActivity implements OnRecallMessa
                     messageList.addView(view);
                     Utils.scrollListToBottom(this);
                 }, Throwable::printStackTrace);
-
     }
 
 
@@ -166,6 +191,41 @@ public class Frp0TalkActivity extends AppCompatActivity implements OnRecallMessa
 
     @Override
     public void onRecallMessageRequested(UUID messageId) {
-
+        RecallRequestMessage message = new RecallRequestMessage(messageId);
+        Observable.just(message)
+                .observeOn(Schedulers.io())
+                .subscribe((recallRequestMessage)->{
+                    Log.d("recall","撤回"+message.toString());
+                    this.socketClient.writeToServer(message);
+                },Throwable::printStackTrace);
+        Observable.just(message)
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe((recallRequestMessage)->{
+                    ItemTextSend send = sendMap.getOrDefault(messageId,null);
+                    if(send!=null)
+                        send.setText("已撤回");
+                });
+        Observable.create((ObservableEmitter<Message> emitter) -> {
+            try {
+                if (this.socketClient != null) {
+                    while (!this.socketClient.isTerminate()) {
+                        Message messages = this.socketClient.readFromServer();
+                        Log.d("收到消息", messages.toString());
+                        emitter.onNext(messages);
+                    }
+                    emitter.onComplete();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                emitter.onError(e);
+            }
+        }).subscribeOn(Schedulers.io());
+        Observable.just(message)
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe((recallRequestMessage)->{
+                   ItemTextReceive receive = receiveMap.getOrDefault(messageId,null);
+                   if(receive!=null)
+                       receive.setText("已撤回");
+                });
     }
 }

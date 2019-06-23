@@ -1,4 +1,4 @@
-package nju.androidchat.client.frp4;
+package nju.androidchat.client.fp0;
 
 import android.annotation.SuppressLint;
 import android.os.Bundle;
@@ -14,7 +14,6 @@ import com.jakewharton.rxbinding3.view.RxView;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
@@ -64,10 +63,7 @@ public class Frp0TalkActivity extends AppCompatActivity implements OnRecallMessa
         messageList = findViewById(R.id.chat_content);
 
         // 1. 初始化发送流
-        this.sendMessages$ = this.createSendMessageStream()
-                // 1秒只能发一条
-                .throttleLatest(1, TimeUnit.SECONDS)
-                .share();
+        this.sendMessages$ = this.createSendMessageStream().share();
 
         // 2. 初始化接受信息流
         this.receiveMessage$ = this.createReceiveMessageStream().share();

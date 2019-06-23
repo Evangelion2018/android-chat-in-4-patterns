@@ -137,7 +137,11 @@ public class SocketClient implements Closeable, Runnable {
      */
     @SneakyThrows
     public void writeToServer(Message message) {
-        out.writeObject(message);
+        try {
+            out.writeObject(message);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 

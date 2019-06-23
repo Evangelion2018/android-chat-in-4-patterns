@@ -12,9 +12,11 @@ import androidx.annotation.StyleableRes;
 
 import java.util.UUID;
 
+import io.reactivex.functions.Function;
 import nju.androidchat.client.R;
+import nju.androidchat.shared.message.ServerSendMessage;
 
-public class ItemTextReceive extends LinearLayout {
+public class ItemTextReceive extends LinearLayout  {
 
 
     @StyleableRes
